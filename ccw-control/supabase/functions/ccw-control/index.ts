@@ -30,10 +30,14 @@ async function getRow(id: string): Promise<any> {
   return data ? data.data : null;
 }
 async function loadBase(): Promise<any> { if (LOCAL) return JSON.parse(await Deno.readTextFile(`${LOCAL}/base.json`)); let row: any = null; try { row = await getRow("base"); } catch (_) { row = null; } return row || BASE; }
-async function loadPin(): Promise<string> {
-  if (LOCAL) return (await Deno.readTextFile(`${LOCAL}/pin.txt`)).trim();
-  const env = (Deno.env.get("CCW_CONTROL_PIN") || "").trim(); if (env) return env;
-  try { const a = await getRow("acceso"); return a && a.pin ? String(a.pin).trim() : ""; } catch (_) { return ""; }
+// PINs válidos: el secreto CCW_CONTROL_PIN (uno o varios separados por comas) y la fila "acceso" de la tabla ({"pin": "...", "pines": ["...", "..."]}); cada persona puede tener el suyo
+async function loadPins(): Promise<string[]> {
+  const out: string[] = [];
+  const add = (v: unknown) => { const s = String(v ?? "").trim(); if (s && !out.includes(s)) out.push(s); };
+  if (LOCAL) { (await Deno.readTextFile(`${LOCAL}/pin.txt`)).split(/[\s,]+/).forEach(add); return out; }
+  (Deno.env.get("CCW_CONTROL_PIN") || "").split(",").forEach(add);
+  try { const a = await getRow("acceso"); if (a) { add(a.pin); if (Array.isArray(a.pines)) a.pines.forEach(add); } } catch (_) { /* sin fila: solo el secreto */ }
+  return out;
 }
 async function loadSupa(): Promise<any> {
   if (LOCAL) return JSON.parse(await Deno.readTextFile(`${LOCAL}/supa.json`));
@@ -88,29 +92,30 @@ Deno.serve(async (req: Request) => {
     const visibleBase = (internalBase.startsWith("/functions/v1") ? "" : "/functions/v1") + internalBase;
     const home = visibleBase + "/";
 
-    const pin = await loadPin();
-    if (!pin) return html("<!doctype html><meta charset=utf-8><title>CCW Control</title><body style=\"font:15px system-ui;padding:40px;color:#0f1f19\"><h2>CCW Control</h2><p>Falta configurar el PIN del equipo: añade el secreto <code>CCW_CONTROL_PIN</code> a la función <code>ccw-control</code> en Supabase (Edge Functions → Secrets).</p></body>", 200);
-    const tok = await token(pin);
-    const authed = !!pin && cookies(req)[COOKIE] === tok;
-    const setCookie = `${COOKIE}=${tok}; Path=${visibleBase}; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`;
+    const pins = await loadPins();
+    if (!pins.length) return html("<!doctype html><meta charset=utf-8><title>CCW Control</title><body style=\"font:15px system-ui;padding:40px;color:#0f1f19\"><h2>CCW Control</h2><p>Falta configurar el PIN del equipo: añade el secreto <code>CCW_CONTROL_PIN</code> a la función <code>ccw-control</code> en Supabase (Edge Functions → Secrets).</p></body>", 200);
+    const toks = await Promise.all(pins.map(token));
+    const authed = toks.includes(cookies(req)[COOKIE] || "");
+    const valido = (p: string | null) => p !== null && p !== "" && pins.includes(p);
+    const setCookie = async (p: string) => `${COOKIE}=${await token(p)}; Path=${visibleBase}; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`;
     const clearCookie = `${COOKIE}=; Path=${visibleBase}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
     const qpin = url.searchParams.get("pin");
 
     if (sub === "/salir") return redirect(home, clearCookie);
     if (req.method === "POST" && sub === "/entrar") {
       const form = await req.formData(); const p = String(form.get("pin") || "").trim();
-      if (pin && p === pin) return redirect(home, setCookie);
+      if (valido(p)) return redirect(home, await setCookie(p));
       await sleep(700); return loginPage(true, 200);
     }
     if (sub === "/estado") {
       const hpin = (req.headers.get("x-ccw-pin") || "").trim();
-      const ok = authed || (!!pin && ((qpin !== null && qpin === pin) || (hpin !== "" && hpin === pin)));
+      const ok = authed || valido(qpin) || valido(hpin);
       if (!ok) return json({ error: "no autorizado" }, 401);
       const [base, supa] = await Promise.all([loadBase(), loadSupa()]);
       if (!base) return json({ error: "falta el estado base en la tabla ccw_control" }, 500);
       return json(fusionar(base, supa));
     }
-    if (qpin !== null) { if (pin && qpin === pin) return redirect(home, setCookie); await sleep(700); return loginPage(true, 200); }
+    if (qpin !== null) { if (valido(qpin)) return redirect(home, await setCookie(qpin)); await sleep(700); return loginPage(true, 200); }
     if (sub === "" || sub === "/" || sub === "/index.html") return redirect(PAGES_URL);
     if (sub === "/pagina") { if (!authed) return loginPage(false, 200); return html(await getPage()); }
     return new Response("No encontrado", { status: 404, headers: { "Cache-Control": "no-store" } });
