@@ -86,7 +86,7 @@ Deno.serve(async (req: Request) => {
     const home = visibleBase + "/";
 
     const pin = await loadPin();
-    if (!pin) return html("<!doctype html><meta charset=utf-8><title>CCW Control</title><body style=\"font:15px system-ui;padding:40px;color:#0f1f19\"><h2>CCW Control</h2><p>Falta configurar el PIN del equipo: añade el secreto <code>CCW_CONTROL_PIN</code> a la función <code>ccw-control</code> en Supabase (Edge Functions → Secrets).</p></body>", 503);
+    if (!pin) return html("<!doctype html><meta charset=utf-8><title>CCW Control</title><body style=\"font:15px system-ui;padding:40px;color:#0f1f19\"><h2>CCW Control</h2><p>Falta configurar el PIN del equipo: añade el secreto <code>CCW_CONTROL_PIN</code> a la función <code>ccw-control</code> en Supabase (Edge Functions → Secrets).</p></body>", 200);
     const tok = await token(pin);
     const authed = !!pin && cookies(req)[COOKIE] === tok;
     const setCookie = `${COOKIE}=${tok}; Path=${visibleBase}; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`;
