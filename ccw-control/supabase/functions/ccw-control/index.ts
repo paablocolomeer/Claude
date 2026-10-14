@@ -1,9 +1,11 @@
 // CCW Control · panel del negocio servido desde Supabase.
 // - Sirve la página (HTML publicado en GitHub, cacheado en memoria) protegida por un PIN de equipo (cookie).
 // - /estado devuelve el estado calculado en el momento: base (tabla ccw_control, fila "base") + Supabase en vivo.
-// - El PIN vive en la tabla ccw_control, fila "acceso" ({"pin": "..."}); solo lo lee el service role.
+// - El PIN del equipo es el secreto CCW_CONTROL_PIN de la función (o, si no existe, la fila "acceso" de la tabla).
+// - Si la tabla no tiene fila "base", usa el estado base incrustado en base.ts (finanzas y configuración al desplegar).
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { fusionar } from "./fusion.ts";
+import { BASE } from "./base.ts";
 
 const FN = "ccw-control";
 const COOKIE = "ccw_control";
@@ -25,10 +27,11 @@ async function getRow(id: string): Promise<any> {
   if (error) throw new Error(error.message);
   return data ? data.data : null;
 }
-async function loadBase(): Promise<any> { return LOCAL ? JSON.parse(await Deno.readTextFile(`${LOCAL}/base.json`)) : await getRow("base"); }
+async function loadBase(): Promise<any> { if (LOCAL) return JSON.parse(await Deno.readTextFile(`${LOCAL}/base.json`)); let row: any = null; try { row = await getRow("base"); } catch (_) { row = null; } return row || BASE; }
 async function loadPin(): Promise<string> {
   if (LOCAL) return (await Deno.readTextFile(`${LOCAL}/pin.txt`)).trim();
-  const a = await getRow("acceso"); return a && a.pin ? String(a.pin) : "";
+  const env = (Deno.env.get("CCW_CONTROL_PIN") || "").trim(); if (env) return env;
+  try { const a = await getRow("acceso"); return a && a.pin ? String(a.pin).trim() : ""; } catch (_) { return ""; }
 }
 async function loadSupa(): Promise<any> {
   if (LOCAL) return JSON.parse(await Deno.readTextFile(`${LOCAL}/supa.json`));
@@ -83,7 +86,8 @@ Deno.serve(async (req: Request) => {
     const home = visibleBase + "/";
 
     const pin = await loadPin();
-    const tok = pin ? await token(pin) : "";
+    if (!pin) return html("<!doctype html><meta charset=utf-8><title>CCW Control</title><body style=\"font:15px system-ui;padding:40px;color:#0f1f19\"><h2>CCW Control</h2><p>Falta configurar el PIN del equipo: añade el secreto <code>CCW_CONTROL_PIN</code> a la función <code>ccw-control</code> en Supabase (Edge Functions → Secrets).</p></body>", 503);
+    const tok = await token(pin);
     const authed = !!pin && cookies(req)[COOKIE] === tok;
     const setCookie = `${COOKIE}=${tok}; Path=${visibleBase}; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax`;
     const clearCookie = `${COOKIE}=; Path=${visibleBase}; Max-Age=0; HttpOnly; Secure; SameSite=Lax`;
