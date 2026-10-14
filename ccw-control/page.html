@@ -283,7 +283,7 @@
       <button role="tab" data-tab="finanzas" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 13h12M3 10l3-3 3 2 4-5"/></svg>Finanzas</button>
       <button role="tab" data-tab="objetivos" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2"/></svg>Objetivos</button>
     </nav>
-    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div id="r-salir" hidden><a href="salir" class="rail-link">Cerrar sesión del panel</a></div></div>
+    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div id="r-salir" hidden><a href="salir" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
   </aside>
 
   <main class="work">
@@ -1182,7 +1182,7 @@
     showTab(current);
   }
   function load(data) {
-    S = data; $("#r-updated").textContent = "Actualizado " + (S.updated_at || ""); if (REMOTE) $("#r-salir").hidden = false;
+    S = data; $("#r-updated").textContent = "Actualizado " + (S.updated_at || ""); if (REMOTE) $("#r-salir").hidden = false; if (!REMOTE && !EMBEDDED) $("#r-full").hidden = false;
     $("#r-sync").textContent = REMOTE && S.ultima_sync && S.ultima_sync.supabase ? "Datos en vivo de Supabase · " + S.ultima_sync.supabase.slice(11) : S.ultima_sync && S.ultima_sync.supabase ? "Supabase sincronizado " + S.ultima_sync.supabase.slice(8, 10) + "/" + S.ultima_sync.supabase.slice(5, 7) + " " + S.ultima_sync.supabase.slice(11) + " · actualización automática cada mañana" : "Supabase · Excel financiero · Libros CCW";
     setupFilter(); buildMC(); renderAll();
   }
