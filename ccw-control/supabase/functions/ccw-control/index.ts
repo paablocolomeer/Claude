@@ -1,15 +1,17 @@
-// CCW Control · panel del negocio servido desde Supabase.
-// - Sirve la página (HTML publicado en GitHub, cacheado en memoria) protegida por un PIN de equipo (cookie).
-// - /estado devuelve el estado calculado en el momento: base (tabla ccw_control, fila "base") + Supabase en vivo.
-// - El PIN del equipo es el secreto CCW_CONTROL_PIN de la función (o, si no existe, la fila "acceso" de la tabla).
-// - Si la tabla no tiene fila "base", usa el estado base incrustado en base.ts (finanzas y configuración al desplegar).
+// CCW Control · API del panel del negocio (Supabase Edge Function).
+// - La página vive en GitHub Pages (PAGES_URL); Supabase no sirve HTML desde su dominio, así que "/" redirige allí.
+// - /estado devuelve el estado calculado en el momento: base (tabla ccw_control, fila "base", o base.ts) + Supabase en vivo.
+//   Requiere el PIN del equipo en la cabecera X-CCW-PIN (la página lo guarda en el navegador), en ?pin= o en la cookie.
+// - El PIN es el secreto CCW_CONTROL_PIN de la función o, si no existe, la fila "acceso" de la tabla ccw_control.
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { fusionar } from "./fusion.ts";
 import { BASE } from "./base.ts";
 
 const FN = "ccw-control";
 const COOKIE = "ccw_control";
-const PAGE_URL = Deno.env.get("CCW_PAGE_URL") || "https://raw.githubusercontent.com/paablocolomeer/claude/main/ccw-control/page.html";
+const PAGE_URL = Deno.env.get("CCW_PAGE_URL") || "https://raw.githubusercontent.com/paablocolomeer/claude/main/ccw-control/index.html";
+const PAGES_URL = Deno.env.get("CCW_PAGES_URL") || "https://paablocolomeer.github.io/Claude/ccw-control/";
+const CORS: Record<string, string> = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "x-ccw-pin, content-type", "Access-Control-Max-Age": "86400", "Vary": "Origin" };
 const LOCAL = Deno.env.get("CCW_LOCAL_DIR") || ""; // solo para pruebas locales: lee base.json, supa.json y pin.txt de esa carpeta
 
 const sb = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -52,7 +54,7 @@ function cookies(req: Request): Record<string, string> {
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const redirect = (to: string, cookie?: string) => { const h: Record<string, string> = { "Location": to, "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }; if (cookie) h["Set-Cookie"] = cookie; return new Response("", { status: 303, headers: h }); };
-const json = (obj: unknown, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
+const json = (obj: unknown, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", ...CORS } });
 const html = (body: string, status = 200, cookie?: string) => { const h: Record<string, string> = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }; if (cookie) h["Set-Cookie"] = cookie; const res = new Response(body, { status, headers: h }); res.headers.set("Content-Type", "text/html; charset=utf-8"); return res; };
 
 function loginPage(error: boolean, status = 200): Response {
@@ -78,6 +80,7 @@ ${error ? '<p class="err">PIN incorrecto.</p>' : ""}
 
 Deno.serve(async (req: Request) => {
   try {
+    if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
     const url = new URL(req.url); const path = url.pathname;
     const i = path.indexOf("/" + FN);
     const internalBase = i >= 0 ? path.slice(0, i + FN.length + 1) : path.replace(/\/+$/, "");
@@ -100,16 +103,16 @@ Deno.serve(async (req: Request) => {
       await sleep(700); return loginPage(true, 200);
     }
     if (sub === "/estado") {
-      const ok = authed || (!!pin && qpin !== null && qpin === pin);
+      const hpin = (req.headers.get("x-ccw-pin") || "").trim();
+      const ok = authed || (!!pin && ((qpin !== null && qpin === pin) || (hpin !== "" && hpin === pin)));
       if (!ok) return json({ error: "no autorizado" }, 401);
       const [base, supa] = await Promise.all([loadBase(), loadSupa()]);
       if (!base) return json({ error: "falta el estado base en la tabla ccw_control" }, 500);
       return json(fusionar(base, supa));
     }
     if (qpin !== null) { if (pin && qpin === pin) return redirect(home, setCookie); await sleep(700); return loginPage(true, 200); }
-    if (sub === "") return redirect(home);
-    if (!authed) return loginPage(false, 200);
-    if (sub === "/" || sub === "/index.html") return html(await getPage());
+    if (sub === "" || sub === "/" || sub === "/index.html") return redirect(PAGES_URL);
+    if (sub === "/pagina") { if (!authed) return loginPage(false, 200); return html(await getPage()); }
     return new Response("No encontrado", { status: 404, headers: { "Cache-Control": "no-store" } });
   } catch (e) {
     return new Response("CCW Control: error al preparar la página. " + ((e as Error).message || e), { status: 500, headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store" } });

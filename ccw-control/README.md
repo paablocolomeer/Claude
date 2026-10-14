@@ -1,11 +1,11 @@
 # CCW Control
 
-Panel del negocio de Corporate Car Wash. Se sirve desde la edge function `ccw-control` del proyecto Supabase de CCW,
-protegido con un PIN de equipo, y lee Supabase en el momento de abrirse.
+Panel del negocio de Corporate Car Wash.
 
-- `page.html` — la página (sin datos; los pide a `./estado`). La edge function la descarga de aquí (raw) y la cachea 10 minutos.
-- `supabase/functions/ccw-control/` — la función: login por PIN (cookie), `/estado` (fusión del estado base con Supabase en vivo), `/salir`.
-- `supabase/migrations/` — tabla `ccw_control` (filas `base` y `acceso`) y función SQL `ccw_control_supabase()`.
+- **Página:** `index.html`, publicada con GitHub Pages en https://paablocolomeer.github.io/Claude/ccw-control/ (sin datos: pide el PIN del equipo y lee los datos en vivo).
+- **API:** edge function `ccw-control` del proyecto Supabase de CCW (`supabase/functions/ccw-control/`): `/estado` devuelve el estado fusionado (base + Supabase en vivo) si la cabecera `X-CCW-PIN` lleva el PIN del equipo; `/` redirige a la página.
+- **Base de datos:** `supabase/migrations/` crea la tabla `ccw_control` (filas `base` y `acceso`) y la función SQL `ccw_control_supabase()` con las exclusiones fijas.
 
-Generado por el agente CCW desde la plantilla `template.html` de CCW Control; la misma plantilla produce la versión
-autónoma (`CCW_Control.html`, con datos incrustados) y la publicada en Claude.
+Supabase no sirve HTML desde su dominio (lo reescribe como texto plano), por eso la página vive aquí y la función solo da datos.
+
+Generado por el agente CCW desde `template.html`; la misma plantilla produce la versión autónoma (`CCW_Control.html`) y la publicada en Claude.

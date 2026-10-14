@@ -263,6 +263,16 @@
   .timeline small { display: flex; justify-content: space-between; font-size: 11.5px; color: rgba(255,255,255,.8); }
   .note { font-size: 12.5px; color: var(--ink-soft); max-width: 90ch; }
   .avisos { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13px; color: var(--ink-soft); }
+  .pin-gate { position: fixed; inset: 0; z-index: 20000; display: grid; place-items: center; background: #012f22; padding: 16px; }
+  .pin-card { background: #fff; color: #0f1f19; border-radius: 18px; padding: 34px 34px 30px; width: min(380px, 100%); box-shadow: 0 30px 80px -30px rgba(0,0,0,.6); box-sizing: border-box; display: grid; gap: 6px; }
+  .pin-card h1 { font: 800 22px/1.2 var(--display); margin: 0; color: #012f22; }
+  .pin-card .sub { color: #5b6660; font-size: 13px; margin: 0 0 16px; }
+  .pin-card label { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #5b6660; }
+  .pin-card input { width: 100%; box-sizing: border-box; font: 600 20px/1 var(--body); letter-spacing: .2em; padding: 12px 14px; border: 1px solid #c9d4cd; border-radius: 10px; outline: none; color: #0f1f19; background: #fff; }
+  .pin-card input:focus { border-color: var(--amber); box-shadow: 0 0 0 3px rgba(240,171,31,.25); }
+  .pin-card .btn { margin-top: 10px; width: 100%; justify-content: center; padding: 12px; font-size: 14px; }
+  .pin-card .err { color: #b42318; font-size: 13px; margin: 4px 0 0; }
+  .pin-card .foot { margin: 14px 0 0; font-size: 11px; color: #8a948f; }
   .empty { background: var(--surface); border: 1px dashed var(--line-strong); border-radius: 14px; text-align: center; padding: 44px 16px; color: var(--ink-soft); display: grid; gap: 8px; justify-items: center; }
   .empty .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); animation: pulse 1.4s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: .35 } 50% { opacity: 1 } }
@@ -283,7 +293,7 @@
       <button role="tab" data-tab="finanzas" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 13h12M3 10l3-3 3 2 4-5"/></svg>Finanzas</button>
       <button role="tab" data-tab="objetivos" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2"/></svg>Objetivos</button>
     </nav>
-    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div id="r-salir" hidden><a href="salir" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
+    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div id="r-salir" hidden><a href="#" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
   </aside>
 
   <main class="work">
@@ -295,6 +305,7 @@
         <div class="chips" id="f-chips"><button data-q="1">Este mes</button><button data-q="3">3 meses</button><button data-q="6">6 meses</button><button data-q="12">12 meses</button><button data-q="all">Todo</button></div>
       </div>
     </div>
+    <div id="pin-gate" class="pin-gate" hidden><form class="pin-card" id="pin-form" autocomplete="off"><h1>CCW Control</h1><p class="sub">Panel del negocio de Corporate Car Wash</p><label for="pin-input">PIN del equipo</label><input id="pin-input" type="password" inputmode="numeric" autocomplete="current-password" required><p class="err" id="pin-err" hidden>PIN incorrecto.</p><button type="submit" class="btn" id="pin-btn">Entrar</button><p class="foot">Acceso reservado al equipo de CCW. Los datos se leen de Supabase en el momento de abrir.</p></form></div>
     <div id="empty" class="empty">
       <div class="dot"></div>
       <div><strong>Cargando el estado del negocio</strong></div>
@@ -322,7 +333,8 @@
     leaflet: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js",
     leafletCss: "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css",
   };
-  const REMOTE = true; // servido desde Supabase: datos en vivo por /estado, mapa real
+  const REMOTE = true; // página en GitHub Pages: datos en vivo desde la función de Supabase, mapa real
+  const REMOTE_API = "https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control";
   const STANDALONE = !!EMBEDDED || REMOTE;
 
   const $ = (s, r) => (r || document).querySelector(s);
@@ -1190,7 +1202,25 @@
 
   (async function boot() {
     if (REMOTE) {
-      try { const r = await fetch("estado", { credentials: "same-origin", cache: "no-store" }); if (r.status === 401) { location.replace("./"); return; } if (!r.ok) throw new Error("HTTP " + r.status); load(await r.json()); }
+      const gate = $("#pin-gate"), form = $("#pin-form"), inp = $("#pin-input"), err = $("#pin-err"), btn = $("#pin-btn");
+      const getPin = () => { try { return localStorage.getItem("ccw.pin") || ""; } catch (e) { return ""; } };
+      const setPin = (v) => { try { if (v) localStorage.setItem("ccw.pin", v); else localStorage.removeItem("ccw.pin"); } catch (e) {} };
+      const cargar = async (pin) => {
+        const r = await fetch(REMOTE_API + "/estado", { headers: { "X-CCW-PIN": pin }, cache: "no-store" });
+        if (r.status === 401) return false;
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        load(await r.json()); return true;
+      };
+      const pedir = (conError) => { gate.hidden = false; err.hidden = !conError; inp.value = ""; setTimeout(() => inp.focus(), 50); };
+      form.onsubmit = async (ev) => {
+        ev.preventDefault(); const pin = inp.value.trim(); if (!pin) return; btn.disabled = true; btn.textContent = "Comprobando…";
+        try { if (await cargar(pin)) { setPin(pin); gate.hidden = true; } else { pedir(true); } }
+        catch (e) { fail("No se han podido cargar los datos", e.message || String(e)); gate.hidden = true; }
+        btn.disabled = false; btn.textContent = "Entrar";
+      };
+      $("#r-salir").querySelector("a").onclick = (ev) => { ev.preventDefault(); setPin(""); location.reload(); };
+      const pin = getPin();
+      try { if (!pin || !(await cargar(pin))) { setPin(""); pedir(false); } }
       catch (e) { fail("No se han podido cargar los datos", e.message || String(e)); }
       return;
     }
