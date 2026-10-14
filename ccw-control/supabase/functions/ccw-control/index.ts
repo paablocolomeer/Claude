@@ -97,7 +97,7 @@ Deno.serve(async (req: Request) => {
     if (req.method === "POST" && sub === "/entrar") {
       const form = await req.formData(); const p = String(form.get("pin") || "").trim();
       if (pin && p === pin) return redirect(home, setCookie);
-      await sleep(700); return loginPage(true, 401);
+      await sleep(700); return loginPage(true, 200);
     }
     if (sub === "/estado") {
       const ok = authed || (!!pin && qpin !== null && qpin === pin);
@@ -106,7 +106,7 @@ Deno.serve(async (req: Request) => {
       if (!base) return json({ error: "falta el estado base en la tabla ccw_control" }, 500);
       return json(fusionar(base, supa));
     }
-    if (qpin !== null) { if (pin && qpin === pin) return redirect(home, setCookie); await sleep(700); return loginPage(true, 401); }
+    if (qpin !== null) { if (pin && qpin === pin) return redirect(home, setCookie); await sleep(700); return loginPage(true, 200); }
     if (sub === "") return redirect(home);
     if (!authed) return loginPage(false, 200);
     if (sub === "/" || sub === "/index.html") return html(await getPage());
