@@ -51,9 +51,9 @@ function cookies(req: Request): Record<string, string> {
   return out;
 }
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const redirect = (to: string, cookie?: string) => { const h = new Headers({ Location: to, "Cache-Control": "no-store" }); if (cookie) h.set("Set-Cookie", cookie); return new Response(null, { status: 303, headers: h }); };
+const redirect = (to: string, cookie?: string) => { const h: Record<string, string> = { "Location": to, "Cache-Control": "no-store", "Content-Type": "text/plain; charset=utf-8" }; if (cookie) h["Set-Cookie"] = cookie; return new Response("", { status: 303, headers: h }); };
 const json = (obj: unknown, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" } });
-const html = (body: string, status = 200, cookie?: string) => { const h = new Headers({ "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Frame-Options": "DENY", "Referrer-Policy": "no-referrer" }); if (cookie) h.set("Set-Cookie", cookie); return new Response(body, { status, headers: h }); };
+const html = (body: string, status = 200, cookie?: string) => { const h: Record<string, string> = { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" }; if (cookie) h["Set-Cookie"] = cookie; const res = new Response(body, { status, headers: h }); res.headers.set("Content-Type", "text/html; charset=utf-8"); return res; };
 
 function loginPage(error: boolean, status = 200): Response {
   return html(`<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CCW Control</title>
