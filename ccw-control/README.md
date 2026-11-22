@@ -11,3 +11,4 @@ Panel del negocio de Corporate Car Wash.
 Supabase no sirve HTML desde su dominio (lo reescribe como texto plano), por eso la página vive aquí y la función solo da datos.
 
 Generado por el agente CCW desde `template.html`; la misma plantilla produce la versión autónoma (`CCW_Control.html`) y la publicada en Claude.
+- **Finanzas:** no se leen en vivo; salen del "Excel Financiero CCW" (Drive). Para pasarlas: descargar el Excel como .xlsx y `python3 -I sync_finanzas.py excel.xlsx estado-base.json nueva.json`, revisar lo que imprime (gastos nuevos y quitados; si alguna categoría no encaja se para) y guardar `movimientos`, `meses`, `rango_datos` y `notas_finanzas` de `nueva.json` en la fila `base`.
