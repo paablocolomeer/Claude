@@ -465,8 +465,9 @@
       const lav = okE.length, cobrado = sum(okE, r => r[4]);
       const serie = months.map(m => ({ m, ok: okE.filter(r => r[0] === m).length, canc: cE.filter(r => r[0] === m).length }));
       const ult = rows.length ? rows.map(r => r[7]).sort().slice(-1)[0] : null;
-      const plazas = (e.plazas_hist && e.plazas_hist.length) ? plazasEn(e, S.hoy) : e.plazas;
-      return { ...e, plazas, lav, canc: cE.length, cancRate: rows.length ? cE.length / rows.length : null, cobrado, ticket: lav ? cobrado / lav : null, clientes: Object.keys(bc).length,
+      // plazas del contrato: en una pausa de servicio plazas_hist marca 0 (para la conversión), pero el edificio sigue teniendo sus plazas
+      const plazas = e.plazas, enPausa = e.tipo === "activo" && e.plazas_hist && e.plazas_hist.length > 0 && plazasEn(e, S.hoy) === 0;
+      return { ...e, plazas, enPausa, lav, canc: cE.length, cancRate: rows.length ? cE.length / rows.length : null, cobrado, ticket: lav ? cobrado / lav : null, clientes: Object.keys(bc).length,
         repiten: Object.values(bc).filter(n => n >= 2).length, regStock, pd, dias, conv: pd ? lav / pd * DAYS_MONTH : null, lavMes: dias ? lav / dias * DAYS_MONTH : null, serie, ultima: ult };
     });
     const act = edif.filter(e => e.tipo === "activo");
@@ -790,7 +791,7 @@
       <div class="dhead"><div>${gradeBadge(n ? n.n : null)}</div><div><h4>${esc(b.nombre)}</h4><div class="src">${esc(b.direccion)} · llaves: ${esc(b.recogida)}${b.empresa ? " · " + esc(b.empresa) : ""}</div><div style="margin-top:6px">${pill(b.tipo === "activo" ? "good" : "warn", b.tipo)} ${accionEdificio(b)}</div></div></div>
       <div class="gauges">${gauge(b.conv, 0.04, "conversión · obj. 4 %", b.conv == null ? "—" : nf1.format(b.conv * 100) + " %", bandCls(n ? n.conv : null))}${gauge(b.tipo === "activo" ? b.regStock / b.plazas : null, 0.30, "registrados · obj. 30 %", b.tipo === "activo" ? nf0.format(b.regStock / b.plazas * 100) + " %" : "—", bandCls(n ? n.reg : null))}${gauge(b.clientes ? b.repiten / b.clientes : null, 0.50, "repiten · obj. 50 %", b.clientes ? nf0.format(b.repiten / b.clientes * 100) + " %" : "—", bandCls(n ? n.rep : null))}${gauge(b.cancRate != null ? 1 - Math.min(1, b.cancRate / 0.2) : null, 1, "cancelación · obj. 0 %", b.cancRate != null ? nf0.format(b.cancRate * 100) + " %" : "—", bandCls(n ? n.canc : null))}</div>
       ${funnel(b)}
-      ${kv({ "Lavados en el periodo · al mes": `${num(b.lav)} · ${b.lavMes != null ? num(b.lavMes, 1) : "—"}`, "Ticket medio · cobrado": `${b.ticket != null ? eur(b.ticket, 2) : "—"} · ${b.cobrado ? eur(b.cobrado) : "—"}`, "Cancelaciones": b.cancRate != null ? `${num(b.canc)} (${pct(b.cancRate)})` : "—", "Días con plazas en el periodo": num(b.dias), "Plazas hoy · desde": `${num(b.plazas)}${b.plazas_hist && b.plazas_hist.length ? " · " + dmy(b.plazas_hist[0][0]) : ""}`, "Última reserva": b.ultima ? dmy(b.ultima) : "—", "Lo que llena a un operario de 5h al 4 %": num(S.optimos.pm5_real / 0.04) + " plazas" })}
+      ${kv({ "Lavados en el periodo · al mes": `${num(b.lav)} · ${b.lavMes != null ? num(b.lavMes, 1) : "—"}`, "Ticket medio · cobrado": `${b.ticket != null ? eur(b.ticket, 2) : "—"} · ${b.cobrado ? eur(b.cobrado) : "—"}`, "Cancelaciones": b.cancRate != null ? `${num(b.canc)} (${pct(b.cancRate)})` : "—", "Días con plazas en el periodo": num(b.dias), "Plazas · desde": `${num(b.plazas)}${b.plazas_hist && b.plazas_hist.length ? " · " + dmy(b.plazas_hist[0][0]) : ""}${b.enPausa ? " · hoy sin servicio" : ""}`, "Última reserva": b.ultima ? dmy(b.ultima) : "—", "Lo que llena a un operario de 5h al 4 %": num(S.optimos.pm5_real / 0.04) + " plazas" })}
       <div><div class="eyebrow" style="margin-bottom:6px">Lavados por mes</div>${b.serie && b.serie.length ? miniBars(b.serie, "ok") : '<div class="note">—</div>'}</div>
       <div><div class="eyebrow" style="margin-bottom:6px">Cómo se forma la nota</div>${n ? notaBars([["Conversión", n.conv, NOTA_W.conv], ["Registrados sobre plazas", n.reg, NOTA_W.reg], ["Clientes que repiten", n.rep, NOTA_W.rep], ["Cancelaciones", n.canc, NOTA_W.canc]]) : '<div class="note">Sin nota: no hay lavados en el periodo.</div>'}</div>
     </div>`;
@@ -1002,7 +1003,7 @@
     });
     const pl = `
       <div class="panel" style="padding:4px 0 10px;overflow:hidden"><div class="tablewrap sheet" style="border:0;border-radius:0"><table>${head}<tbody>${body}</tbody></table></div></div>
-      <div class="note">${modeFin === "caja" ? "Caja: cada gasto en el mes en que se paga, fiel al flujo de caja de tu Excel." : esc(S.amortizacion.nota)} Material de lavado = productos + lo pagado a El Colibrí por lavar. Trabajadores = quien va a los lavados (hoy, los pagos a Zancus como autónomo; desde noviembre, su nómina y Seguridad Social). Sueldos = equipo interno. Las facturas pendientes de El Colibrí (${eur(S.notas_finanzas.colibri_pendiente)}) no entran. El punto marca el mes en curso.</div>`;
+      <div class="note">${modeFin === "caja" ? "Caja: cada gasto en el mes en que se paga, fiel al flujo de caja de tu Excel." : esc(S.amortizacion.nota)} Material de lavado = productos + lo pagado a El Colibrí por lavar. Trabajadores = quien va a los lavados (antes, los pagos a Zancus como autónomo; desde el 16 de noviembre de 2026, la nómina y Seguridad Social de Nataly). Sueldos = equipo interno. Las facturas pendientes de El Colibrí (${eur(S.notas_finanzas.colibri_pendiente)}) no entran. El punto marca el mes en curso.</div>`;
     const last3 = S.meses.filter(r => r.m <= hasta && r.m !== S.hoy.slice(0, 7)).slice(-3);
     const resMedio3 = last3.length ? sum(last3, r => r.entradas_neto - gastoMes(r.m, modeFin)) / last3.length : null;
     const inv = sum(S.meses.filter(r => r.m <= hasta), r => catsOf(r.m, "caja").marketing + catsOf(r.m, "caja").web);
