@@ -1,19 +1,42 @@
 // CCW Control · fusiona el estado base (tabla ccw_control, fila "base") con la extracción en vivo de Supabase
-// (función SQL ccw_control_supabase). Misma lógica que refresh.py de la actualización diaria.
+// (función SQL ccw_control_supabase).
+//
+// 22/11/2026: la lista de edificios, su estado (activo / pendiente) y los periodos en los que
+// se ha dado servicio los decide la fila "base" (los mantiene el agente CCW), no Supabase.
+// Antes, un edificio abierto en la web (Cristalia) pasaba solo a "activo" con todas sus plazas
+// y hundía la conversión aunque todavía no se lavara allí.
+// - edificios[].claves: palabras que identifican el edificio en buildings.name de Supabase.
+// - edificios[].periodos: [{desde, hasta|null, plazas}] días con servicio. Fuera de ellos las
+//   plazas no cuentan para la conversión (plazas_hist se genera desde aquí, con 0 en las pausas).
 
-// id del edificio en CCW Control -> palabras que lo identifican en buildings.name
+// Palabras por defecto si la fila base no trae "claves"
 const MAPA: Record<string, string[]> = {
-  cubos: ["cubos"], ontier: ["ontier", "habana"], cristalia: ["cristalia"], fujitsu: ["fujitsu"],
-  merlin: ["merlin", "castellana 257"], gmp: ["gmp"],
+  cubos: ["cubos"], ontier: ["ontier", "habana"], cristalia: ["cristalia"], ruizpicasso: ["ruiz picasso", "picasso", "merlin"],
 };
 const RECOGIDA: Record<string, string> = { recepcion: "recepción", taquillas: "taquillas", taquilla: "taquillas", porteria: "portería", "portería": "portería" };
 
 function edificioId(name: unknown, estado: any): string | null {
   const n = String(name || "").toLowerCase();
   for (const e of estado.edificios) {
-    for (const kw of (MAPA[e.id] || [e.id])) if (n.includes(kw)) return e.id;
+    const claves: string[] = Array.isArray(e.claves) && e.claves.length ? e.claves : (MAPA[e.id] || [e.id]);
+    for (const kw of claves) if (n.includes(String(kw).toLowerCase())) return e.id;
   }
   return null;
+}
+
+function diaSiguiente(iso: string): string {
+  const d = new Date(iso + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 1); return d.toISOString().slice(0, 10);
+}
+
+// periodos de servicio -> plazas_hist con 0 en las pausas
+function plazasHist(periodos: any[]): [string, number][] {
+  const ps = periodos.filter((p) => p && p.desde).sort((a, b) => String(a.desde).localeCompare(String(b.desde)));
+  const out: [string, number][] = [];
+  for (const p of ps) {
+    out.push([String(p.desde).slice(0, 10), Number(p.plazas || 0)]);
+    if (p.hasta) out.push([diaSiguiente(String(p.hasta).slice(0, 10)), 0]);
+  }
+  return out;
 }
 
 function monthRange(a: string, b: string): string[] {
@@ -32,7 +55,7 @@ export function fusionar(baseIn: any, supa: any, ahora = new Date()): any {
   const hoy: string = supa.hoy || (() => { const p = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Madrid", year: "numeric", month: "2-digit", day: "2-digit" }).format(ahora); return p; })();
   const avisos: string[] = [];
 
-  // edificios: plazas, alta y estado según Supabase
+  // edificios: la ficha (estado, plazas, periodos) es la de la fila base; de Supabase solo la recogida de llaves
   const supById: Record<string, any> = {};
   for (const b of supa.edificios) {
     const eid = edificioId(b.name, estado);
@@ -40,19 +63,11 @@ export function fusionar(baseIn: any, supa: any, ahora = new Date()): any {
     supById[eid] = b;
   }
   for (const e of estado.edificios) {
+    if (Array.isArray(e.periodos) && e.periodos.length) e.plazas_hist = plazasHist(e.periodos);
     const b = supById[e.id]; if (!b) continue;
     const plazas = Number(b.plazas || 0);
-    if (e.tipo === "pendiente" && b.activo && plazas > 0) {
-      const alta = String(b.alta || hoy).slice(0, 10);
-      e.tipo = "activo"; e.alta = alta.slice(0, 7); e.plazas = plazas; e.plazas_hist = [[alta, plazas]];
-      avisos.push(`${e.nombre} ya está en Supabase: pasa a activo con ${plazas} plazas desde ${alta}.`);
-    } else if (plazas > 0 && plazas !== e.plazas) {
-      if (!e.plazas_hist) e.plazas_hist = [[(e.alta && String(e.alta).length === 7) ? e.alta + "-01" : hoy, e.plazas]];
-      e.plazas_hist.push([hoy, plazas]);
-      avisos.push(`${e.nombre}: plazas ${e.plazas} → ${plazas}.`);
-      e.plazas = plazas;
-    }
-    if (e.tipo === "activo" && b.recogida) e.recogida = RECOGIDA[String(b.recogida).toLowerCase()] || String(b.recogida);
+    if (plazas > 0 && e.plazas && plazas !== Number(e.plazas)) avisos.push(`${e.nombre}: Supabase dice ${plazas} plazas y CCW Control ${e.plazas}. Díselo al agente si ha cambiado.`);
+    if (b.recogida) e.recogida = RECOGIDA[String(b.recogida).toLowerCase()] || String(b.recogida);
   }
 
   // reservas: [mes, edificio_id, cliente_idx, ok, final, pagado, devuelto, fecha]
@@ -64,6 +79,13 @@ export function fusionar(baseIn: any, supa: any, ahora = new Date()): any {
     const ok = String(status).toLowerCase() === "cancelled" ? 0 : 1;
     reservas.push([String(fecha).slice(0, 7), eid, clientes.get(cli), ok, Math.round(Number(final || 0) * 100) / 100, Math.round(Number(pagado || 0) * 100) / 100, Math.round(Number(devuelto || 0) * 100) / 100, fecha]);
     if (ok && worker) { const k = String(worker).trim().toLowerCase(); porWorker[k] = (porWorker[k] || 0) + 1; }
+  }
+  const pendientes = new Set((estado.edificios || []).filter((e: any) => e.tipo !== "activo").map((e: any) => e.id));
+  const enPendientes: Record<string, number> = {};
+  for (const r of reservas) if (pendientes.has(r[1]) && r[3] === 1) enPendientes[r[1]] = (enPendientes[r[1]] || 0) + 1;
+  for (const [id, n] of Object.entries(enPendientes)) {
+    const e = estado.edificios.find((x: any) => x.id === id);
+    avisos.push(`${n} reserva${n > 1 ? "s" : ""} en ${e ? e.nombre : id}, que en CCW Control sigue sin empezar. Díselo al agente para abrir su periodo de servicio.`);
   }
   const antes = (estado.reservas || []).length;
   estado.reservas = reservas;
