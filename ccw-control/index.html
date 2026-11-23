@@ -293,7 +293,7 @@
       <button role="tab" data-tab="finanzas" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 13h12M3 10l3-3 3 2 4-5"/></svg>Finanzas</button>
       <button role="tab" data-tab="objetivos" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2"/></svg>Objetivos</button>
     </nav>
-    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div id="r-salir" hidden><a href="#" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
+    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div><a href="../ccw-crm/" class="rail-link">Abrir el CRM ↗</a></div><div id="r-salir" hidden><a href="#" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
   </aside>
 
   <main class="work">
@@ -305,7 +305,7 @@
         <div class="chips" id="f-chips"><button data-q="1">Este mes</button><button data-q="3">3 meses</button><button data-q="6">6 meses</button><button data-q="12">12 meses</button><button data-q="all">Todo</button></div>
       </div>
     </div>
-    <div id="pin-gate" class="pin-gate" hidden><form class="pin-card" id="pin-form" autocomplete="off"><h1>CCW Control</h1><p class="sub">Panel del negocio de Corporate Car Wash</p><label for="pin-input">PIN del equipo</label><input id="pin-input" type="password" inputmode="numeric" autocomplete="current-password" required><p class="err" id="pin-err" hidden>PIN incorrecto.</p><button type="submit" class="btn" id="pin-btn">Entrar</button><p class="foot">Acceso reservado al equipo de CCW. Los datos se leen de Supabase en el momento de abrir.</p></form></div>
+    <div id="pin-gate" class="pin-gate" hidden><form class="pin-card" id="pin-form" autocomplete="off"><h1>CCW Control</h1><p class="sub">Panel del negocio de Corporate Car Wash</p><label for="pin-input">PIN del equipo</label><input id="pin-input" type="password" inputmode="numeric" autocomplete="current-password" required><p class="err" id="pin-err" hidden>PIN incorrecto.</p><button type="submit" class="btn" id="pin-btn">Entrar</button><p class="foot"><a href="../ccw-crm/">O entra con tu cuenta del CRM</a> y vuelve aquí.</p><p class="foot">Acceso reservado al equipo de CCW. Los datos se leen de Supabase en el momento de abrir.</p></form></div>
     <div id="empty" class="empty">
       <div class="dot"></div>
       <div><strong>Cargando el estado del negocio</strong></div>
@@ -716,6 +716,31 @@
     ];
     return { st, titulo, razones, ratio };
   }
+  // CCW 23/11/2026: resumen del CRM comercial (mismo Supabase). Embudo, firmas y entradas.
+  function renderCRM() {
+    const K = S && S.crm; if (!K) return "";
+    const fd = (d) => d ? d.split("-").reverse().join("/") : "sin fecha";
+    const vivas = K.etapas.filter(e => !e.cerrada);
+    const maxN = Math.max(1, ...vivas.map(e => e.cuentas));
+    const tiles = [
+      { lbl: "Cuentas en marcha", val: num(K.abiertas), sub: num(K.cuentas) + " en el CRM · " + num(K.plazasAbiertas) + " plazas", cls: "amber" },
+      { lbl: "Valor estimado del pipeline", val: eur(K.valorAbierto), sub: "al mes, con " + num(K.tasaUso, 1) + " % de uso y " + eur(K.precioLavado) + " por lavado" },
+      { lbl: "Firmados", val: num(K.firmados.length), sub: K.proximasEntradas.length ? "próxima entrada: " + K.proximasEntradas[0].nombre + " " + fd(K.proximasEntradas[0].entrada) : "sin entradas pendientes", cls: "good" },
+      { lbl: "Follow-ups", val: num(K.followups.pendientes), sub: num(K.followups.vencidos) + " vencidos · " + num(K.followups.hoy) + " para hoy", cls: K.followups.vencidos ? "bad" : "good" },
+    ];
+    const barra = (e) => `<div style="display:grid;grid-template-columns:150px 1fr 120px;gap:10px;align-items:center;font-size:13px"><span>${esc(e.nombre)}</span><span style="background:var(--line);border-radius:6px;height:12px;overflow:hidden"><i style="display:block;height:100%;width:${Math.round(e.cuentas / maxN * 100)}%;background:var(--brand-2)"></i></span><span class="num">${num(e.cuentas)} · ${num(e.plazas)} plazas</span></div>`;
+    const fila = (x, fecha) => `<li>${esc(x.nombre)} · ${num(x.plazas)} plazas · ${esc(fecha)}</li>`;
+    return `
+      <div class="panel">
+        <div class="panel-head"><h3>Comercial (CRM)</h3><span class="src"><a href="../ccw-crm/" target="_blank" rel="noopener">Abrir el CRM</a> · datos del CRM en el momento de abrir</span></div>
+        <div class="kpis">${tiles.map(kpiCard).join("")}</div>
+        <div style="display:grid;gap:8px">${vivas.map(barra).join("")}</div>
+        ${K.proximasFirmas.length ? `<div><b>Pendientes de firma</b><ul class="avisos">${K.proximasFirmas.map(x => fila(x, "firma " + fd(x.firma))).join("")}</ul></div>` : ""}
+        ${K.proximasEntradas.length ? `<div><b>Próximas entradas</b><ul class="avisos">${K.proximasEntradas.map(x => fila(x, "entrada " + fd(x.entrada))).join("")}</ul></div>` : ""}
+        ${K.avisos.length ? `<div><b>Avisos</b><ul class="avisos">${K.avisos.map(a => `<li>${esc(a)}</li>`).join("")}</ul></div>` : ""}
+      </div>`;
+  }
+
   function renderResumen(C) {
     const sem = semaforo(C);
     const tiles = [
@@ -732,6 +757,7 @@
       <div class="hero"><div><div class="state"><i class="${sem.st}"></i>Semáforo · ${esc(mlabel(desde))} → ${esc(mlabel(hasta))}</div><h2>${esc(sem.titulo)}</h2><ul>${sem.razones.map(r => `<li>${esc(r)}</li>`).join("")}</ul></div>
         <div class="big"><b>${pct(sem.ratio, 0)}</b>de la demanda que necesita<br>un operario de 5h (${num(S.optimos.pm5_real)} lavados/mes)</div></div>
       <div class="kpis">${tiles.map(kpiCard).join("")}</div>
+      ${renderCRM()}
       <div class="panel">
         <div class="panel-head"><h3>Entradas y salidas de caja por mes</h3><span class="src">Excel financiero · lo que entra y sale del banco, netos de IVA</span></div>
         ${cashChart(C.fin, C.saldoIni, "caja")}
@@ -1206,8 +1232,18 @@
       const gate = $("#pin-gate"), form = $("#pin-form"), inp = $("#pin-input"), err = $("#pin-err"), btn = $("#pin-btn");
       const getPin = () => { try { return localStorage.getItem("ccw.pin") || ""; } catch (e) { return ""; } };
       const setPin = (v) => { try { if (v) localStorage.setItem("ccw.pin", v); else localStorage.removeItem("ccw.pin"); } catch (e) {} };
+      // CCW 23/11/2026: el CRM (../ccw-crm/) guarda su sesión de Supabase en este mismo navegador.
+      const SB_KEY = "sb-bvpzazuoatrzblogaqjj-auth-token";
+      const tokenCRM = () => {
+        let ses = null; try { ses = JSON.parse(localStorage.getItem(SB_KEY) || "null"); } catch (e) { ses = null; }
+        if (!ses || !ses.access_token) return "";
+        // Solo se usa si sigue vigente: renovarla aquí podría cerrar la sesión abierta en el CRM.
+        // Si ha caducado, basta con abrir el CRM (la renueva solo) o entrar con el PIN.
+        return ses.expires_at && ses.expires_at * 1000 > Date.now() + 30000 ? ses.access_token : "";
+      };
       const cargar = async (pin) => {
-        const r = await fetch(REMOTE_API + "/estado", { headers: { "X-CCW-PIN": pin }, cache: "no-store" });
+        const h = { "X-CCW-PIN": pin }; const t = tokenCRM(); if (t) h["Authorization"] = "Bearer " + t;
+        const r = await fetch(REMOTE_API + "/estado", { headers: h, cache: "no-store" });
         if (r.status === 401) return false;
         if (!r.ok) throw new Error("HTTP " + r.status);
         load(await r.json()); return true;
@@ -1221,7 +1257,7 @@
       };
       $("#r-salir").querySelector("a").onclick = (ev) => { ev.preventDefault(); setPin(""); location.reload(); };
       const pin = getPin();
-      try { if (!pin || !(await cargar(pin))) { setPin(""); pedir(false); } }
+      try { if (!(await cargar(pin))) { setPin(""); pedir(false); } }
       catch (e) { fail("No se han podido cargar los datos", e.message || String(e)); }
       return;
     }

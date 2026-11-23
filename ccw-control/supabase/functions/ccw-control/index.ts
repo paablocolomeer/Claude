@@ -6,12 +6,13 @@
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
 import { fusionar } from "./fusion.ts";
 import { BASE } from "./base.ts";
+import { resumenCRM } from "./crm.ts";
 
 const FN = "ccw-control";
 const COOKIE = "ccw_control";
 const PAGE_URL = Deno.env.get("CCW_PAGE_URL") || "https://raw.githubusercontent.com/paablocolomeer/claude/main/ccw-control/index.html";
 const PAGES_URL = Deno.env.get("CCW_PAGES_URL") || "https://paablocolomeer.github.io/Claude/ccw-control/";
-const CORS: Record<string, string> = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "x-ccw-pin, content-type", "Access-Control-Max-Age": "86400", "Vary": "Origin" };
+const CORS: Record<string, string> = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "x-ccw-pin, authorization, apikey, content-type", "Access-Control-Max-Age": "86400", "Vary": "Origin" };
 const LOCAL = Deno.env.get("CCW_LOCAL_DIR") || ""; // solo para pruebas locales: lee base.json, supa.json y pin.txt de esa carpeta
 
 const sb = () => createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -44,6 +45,26 @@ async function loadSupa(): Promise<any> {
   const { data, error } = await sb().rpc("ccw_control_supabase");
   if (error) throw new Error(error.message);
   return typeof data === "string" ? JSON.parse(data) : data;
+}
+
+// CCW 23/11/2026: el CRM vive en el mismo Supabase. Quien tiene sesión en el CRM y está en
+// crm_miembros entra en CCW Control sin PIN (la página manda su token de sesión).
+async function esMiembroCRM(req: Request): Promise<boolean> {
+  const m = (req.headers.get("authorization") || "").match(/^Bearer\s+(.+)$/i);
+  if (!m) return false;
+  try {
+    const { data, error } = await sb().auth.getUser(m[1]);
+    const email = data?.user?.email?.toLowerCase();
+    if (error || !email) return false;
+    const { data: fila } = await sb().from("crm_miembros").select("email").eq("email", email).maybeSingle();
+    return !!fila;
+  } catch (_) { return false; }
+}
+async function loadCRM(): Promise<any> {
+  if (LOCAL) { try { return JSON.parse(await Deno.readTextFile(`${LOCAL}/crm.json`)); } catch (_) { return null; } }
+  const { data, error } = await sb().from("crm_estado").select("datos").eq("id", 1).maybeSingle();
+  if (error) return null;
+  return data ? data.datos : null;
 }
 
 async function token(pin: string): Promise<string> {
@@ -109,11 +130,13 @@ Deno.serve(async (req: Request) => {
     }
     if (sub === "/estado") {
       const hpin = (req.headers.get("x-ccw-pin") || "").trim();
-      const ok = authed || valido(qpin) || valido(hpin);
+      const ok = authed || valido(qpin) || valido(hpin) || await esMiembroCRM(req);
       if (!ok) return json({ error: "no autorizado" }, 401);
-      const [base, supa] = await Promise.all([loadBase(), loadSupa()]);
+      const [base, supa, crm] = await Promise.all([loadBase(), loadSupa(), loadCRM()]);
       if (!base) return json({ error: "falta el estado base en la tabla ccw_control" }, 500);
-      return json(fusionar(base, supa));
+      const estado: any = fusionar(base, supa);
+      try { estado.crm = resumenCRM(crm, base, supa?.hoy || new Date().toISOString().slice(0, 10)); } catch (_) { estado.crm = null; }
+      return json(estado);
     }
     if (qpin !== null) { if (valido(qpin)) return redirect(home, await setCookie(qpin)); await sleep(700); return loginPage(true, 200); }
     if (sub === "" || sub === "/" || sub === "/index.html") return redirect(PAGES_URL);
