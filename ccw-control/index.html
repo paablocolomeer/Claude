@@ -724,7 +724,7 @@
     const maxN = Math.max(1, ...vivas.map(e => e.cuentas));
     const tiles = [
       { lbl: "Cuentas en marcha", val: num(K.abiertas), sub: num(K.cuentas) + " en el CRM · " + num(K.plazasAbiertas) + " plazas", cls: "amber" },
-      { lbl: "Valor estimado del pipeline", val: eur(K.valorAbierto), sub: "al mes, con " + num(K.tasaUso, 1) + " % de uso y " + eur(K.precioLavado) + " por lavado" },
+      { lbl: "Valor estimado del pipeline", val: eur(K.valorAbierto), sub: "al mes: plazas × " + num(K.tasaUso, 2) + " % que lavan × " + eur(K.precioLavado, 2) + " por lavado" + (K.datosReales ? " (datos reales de la web)" : " (estimación del CRM)") },
       { lbl: "Firmados", val: num(K.firmados.length), sub: K.proximasEntradas.length ? "próxima entrada: " + K.proximasEntradas[0].nombre + " " + fd(K.proximasEntradas[0].entrada) : "sin entradas pendientes", cls: "good" },
       { lbl: "Follow-ups", val: num(K.followups.pendientes), sub: num(K.followups.vencidos) + " vencidos · " + num(K.followups.hoy) + " para hoy", cls: K.followups.vencidos ? "bad" : "good" },
     ];

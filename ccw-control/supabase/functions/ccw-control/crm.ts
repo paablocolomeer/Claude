@@ -67,6 +67,7 @@ export function resumenCRM(d: any, base: any, hoy: string) {
     valorAbierto: valor(plazasAbiertas),
     precioLavado: precio,
     tasaUso: Number(aj.tasaUso ?? 4),
+    datosReales: aj.datosReales !== false && !!aj.reales,
     etapas,
     firmados,
     proximasFirmas,
