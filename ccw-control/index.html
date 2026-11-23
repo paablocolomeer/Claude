@@ -293,7 +293,7 @@
       <button role="tab" data-tab="finanzas" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2 13h12M3 10l3-3 3 2 4-5"/></svg>Finanzas</button>
       <button role="tab" data-tab="objetivos" aria-selected="false"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><circle cx="8" cy="8" r="2.5"/><path d="M8 2v2M8 12v2M2 8h2M12 8h2"/></svg>Objetivos</button>
     </nav>
-    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div><a href="../ccw-crm/" class="rail-link">Abrir el CRM ↗</a></div><div id="r-salir" hidden><a href="#" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
+    <div class="railfoot"><div><b id="r-updated">Esperando datos…</b></div><div id="r-range"></div><div id="r-sync">Supabase · Excel financiero · Libros CCW</div><div><a href="../ccw-crm/" class="rail-link">Ir al CRM</a></div><div id="r-salir" hidden><a href="#" class="rail-link">Cerrar sesión del panel</a></div><div id="r-full" hidden><a href="https://bvpzazuoatrzblogaqjj.supabase.co/functions/v1/ccw-control/" target="_blank" rel="noopener" class="rail-link">Abrir el panel completo (mapa real, datos en vivo)</a></div></div>
   </aside>
 
   <main class="work">
@@ -305,7 +305,7 @@
         <div class="chips" id="f-chips"><button data-q="1">Este mes</button><button data-q="3">3 meses</button><button data-q="6">6 meses</button><button data-q="12">12 meses</button><button data-q="all">Todo</button></div>
       </div>
     </div>
-    <div id="pin-gate" class="pin-gate" hidden><form class="pin-card" id="pin-form" autocomplete="off"><h1>CCW Control</h1><p class="sub">Panel del negocio de Corporate Car Wash</p><label for="pin-input">PIN del equipo</label><input id="pin-input" type="password" inputmode="numeric" autocomplete="current-password" required><p class="err" id="pin-err" hidden>PIN incorrecto.</p><button type="submit" class="btn" id="pin-btn">Entrar</button><p class="foot"><a href="../ccw-crm/">O entra con tu cuenta del CRM</a> y vuelve aquí.</p><p class="foot">Acceso reservado al equipo de CCW. Los datos se leen de Supabase en el momento de abrir.</p></form></div>
+    <div id="pin-gate" class="pin-gate" hidden><form class="pin-card" id="pin-form" autocomplete="off"><h1>CCW Control</h1><p class="sub">Panel del negocio de Corporate Car Wash</p><label for="pin-input">PIN del equipo</label><input id="pin-input" type="password" inputmode="numeric" autocomplete="current-password" required><p class="err" id="pin-err" hidden>PIN incorrecto.</p><button type="submit" class="btn" id="pin-btn">Entrar</button><p class="foot"><a href="../ccw-crm/?volver=control">O entra con tu cuenta del CRM</a></p><p class="foot">Acceso reservado al equipo de CCW. Los datos se leen de Supabase en el momento de abrir.</p></form></div>
     <div id="empty" class="empty">
       <div class="dot"></div>
       <div><strong>Cargando el estado del negocio</strong></div>
@@ -1257,7 +1257,17 @@
       };
       $("#r-salir").querySelector("a").onclick = (ev) => { ev.preventDefault(); setPin(""); location.reload(); };
       const pin = getPin();
-      try { if (!(await cargar(pin))) { setPin(""); pedir(false); } }
+      // CCW 23/11/2026: un único acceso. Sin PIN guardado ni sesión vigente, se entra por el CRM
+      // (../ccw-crm/?volver=control), que pide el correo o renueva la sesión y vuelve aquí solo.
+      // Si se acaba de volver del CRM y aun así no hay acceso, se enseña el PIN (sin bucles).
+      const irAlCRM = () => {
+        let reciente = false; try { reciente = Date.now() - Number(sessionStorage.getItem("ccw.vuelta") || 0) < 60000; } catch (e) {}
+        if (reciente) return false;
+        try { sessionStorage.setItem("ccw.vuelta", String(Date.now())); } catch (e) {}
+        location.replace("../ccw-crm/?volver=control"); return true;
+      };
+      if (!pin && !tokenCRM() && irAlCRM()) return;
+      try { if (!(await cargar(pin))) { setPin(""); if (!irAlCRM()) pedir(false); } }
       catch (e) { fail("No se han podido cargar los datos", e.message || String(e)); }
       return;
     }
