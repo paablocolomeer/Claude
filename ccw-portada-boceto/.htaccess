@@ -1,0 +1,61 @@
+# ------------------------------------------------------------------
+# Apache config for Hostinger (corporatecarwash.com)
+# Replaces Netlify's _redirects, which Apache does not understand.
+# ------------------------------------------------------------------
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # --- Canonical: https://www.corporatecarwash.com ---
+  # The app. subdomain was removed. Never send traffic there.
+  # Apex (corporatecarwash.com) and the old app host both land on www.
+  RewriteCond %{HTTP_HOST} ^corporatecarwash\.com$ [NC,OR]
+  RewriteCond %{HTTP_HOST} ^app\.corporatecarwash\.com$ [NC]
+  RewriteRule ^(.*)$ https://www.corporatecarwash.com/$1 [R=301,L]
+
+  # Force HTTPS on www as well
+  RewriteCond %{HTTPS} off
+  RewriteCond %{HTTP_HOST} ^www\.corporatecarwash\.com$ [NC]
+  RewriteRule ^(.*)$ https://www.corporatecarwash.com/$1 [R=301,L]
+
+  # --- SPA fallback (React Router) ---
+  # Serve existing files/directories directly...
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+  # Missing build files are a real 404, not the home page (CCW 22/11/2026, point 90)
+  RewriteRule ^assets/ - [R=404,L]
+  # ...otherwise hand everything to index.html
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# --- Caching for hashed build assets ---
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType image/png "access plus 1 month"
+  ExpiresByType image/jpeg "access plus 1 month"
+  ExpiresByType image/svg+xml "access plus 1 month"
+  ExpiresByType image/webp "access plus 1 month"
+</IfModule>
+
+# Never cache index.html (so new deploys are picked up immediately)
+<IfModule mod_headers.c>
+  <FilesMatch "index\.html$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+  # CCW 24/11/2026: el service worker de la app de la trabajadora tiene que llegar siempre nuevo
+  <FilesMatch "^sw-trabajador\.js$">
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+  </FilesMatch>
+</IfModule>
+
+# --- Security headers (mirrors old netlify.toml) ---
+<IfModule mod_headers.c>
+  Header set X-Frame-Options "DENY"
+  Header set X-Content-Type-Options "nosniff"
+  Header set X-XSS-Protection "1; mode=block"
+  Header set Referrer-Policy "strict-origin-when-cross-origin"
+</IfModule>
